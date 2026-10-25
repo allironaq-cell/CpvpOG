@@ -1,0 +1,42 @@
+name: build
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Set Fabric versions
+        run: |
+          MC=1.21.11
+          YARN=$(curl -s https://meta.fabricmc.net/v2/versions/yarn/$MC | jq -r '.[0].version')
+          LOADER=$(curl -s https://meta.fabricmc.net/v2/versions/loader | jq -r '[.[]|select(.stable)][0].version')
+          API=$(curl -s -G "https://api.modrinth.com/v2/project/fabric-api/version" \
+                --data-urlencode "game_versions=[\"$MC\"]" \
+                --data-urlencode 'loaders=["fabric"]' | jq -r '.[0].version_number')
+          echo "yarn=$YARN loader=$LOADER api=$API"
+          sed -i "s/^yarn_mappings=.*/yarn_mappings=$YARN/" gradle.properties
+          sed -i "s/^loader_version=.*/loader_version=$LOADER/" gradle.properties
+          sed -i "s/^fabric_version=.*/fabric_version=$API/" gradle.properties
+          cat gradle.properties
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 9.2.0
+
+      - run: gradle build --no-daemon
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stunslammacro-jar
+          path: |
+            build/libs/*.jar
+            !build/libs/*-sources.jar
